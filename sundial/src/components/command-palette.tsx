@@ -11,6 +11,8 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
   LayoutDashboard,
+  FileText,
+  SquareCheckBig,
   Users,
   FolderKanban,
   Receipt,
@@ -18,6 +20,7 @@ import {
   ShieldCheck,
   Brain,
   Activity,
+  Flame,
   Play,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -55,6 +58,8 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
 
   const pages = [
     { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Workspace", href: "/dashboard/workspace", icon: FileText },
+    { name: "Tasks", href: "/dashboard/tasks", icon: SquareCheckBig },
     { name: "Clients", href: "/dashboard/clients", icon: Users },
     { name: "Projects", href: "/dashboard/projects", icon: FolderKanban },
     { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
@@ -62,6 +67,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
     { name: "Approvals", href: "/dashboard/approvals", icon: ShieldCheck },
     { name: "Memory", href: "/dashboard/memory", icon: Brain },
     { name: "Activity", href: "/dashboard/activity", icon: Activity },
+    { name: "Usage", href: "/dashboard/usage", icon: Flame },
   ];
 
   return (

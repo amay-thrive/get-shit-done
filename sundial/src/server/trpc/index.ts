@@ -6,6 +6,7 @@ import { agentsRouter } from "./routers/agents";
 import { approvalsRouter } from "./routers/approvals";
 import { activityRouter } from "./routers/activity";
 import { dashboardRouter } from "./routers/dashboard";
+import { workspaceRouter } from "./routers/workspace";
 
 export const appRouter = router({
   dashboard: dashboardRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   agents: agentsRouter,
   approvals: approvalsRouter,
   activity: activityRouter,
+  workspace: workspaceRouter,
 });
 
 export type AppRouter = typeof appRouter;

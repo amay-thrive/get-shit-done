@@ -77,6 +77,39 @@ export const agentsRouter = router({
       return { ok: true };
     }),
 
+  usageByAgent: protectedProcedure.query(async ({ ctx }) => {
+    const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+    const { data, error } = await ctx.db
+      .from("agent_runs")
+      .select(
+        "agent_id, status, input_tokens, output_tokens, cost_microdollars, agent_definitions(name)"
+      )
+      .gte("created_at", since);
+    if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+
+    const byAgent = new Map<
+      string,
+      { name: string; runs: number; failed: number; tokens: number; costMicro: number }
+    >();
+    for (const run of data) {
+      const name =
+        (run.agent_definitions as { name: string } | null)?.name ?? run.agent_id;
+      const entry = byAgent.get(name) ?? {
+        name,
+        runs: 0,
+        failed: 0,
+        tokens: 0,
+        costMicro: 0,
+      };
+      entry.runs += 1;
+      if (run.status === "failed") entry.failed += 1;
+      entry.tokens += run.input_tokens + run.output_tokens;
+      entry.costMicro += run.cost_microdollars;
+      byAgent.set(name, entry);
+    }
+    return [...byAgent.values()].sort((a, b) => b.costMicro - a.costMicro);
+  }),
+
   stats: protectedProcedure.query(async ({ ctx }) => {
     const since = new Date(Date.now() - 30 * 86400_000).toISOString();
     const { data, error } = await ctx.db

@@ -241,6 +241,109 @@ export function buildTools(ctx: ToolContext): Record<string, Tool> {
       },
     }),
 
+    "docs.search": tool({
+      description:
+        "Search the studio's workspace documents (briefs, SOPs, meeting notes, contracts) by meaning. Falls back to keyword match when embeddings are off.",
+      inputSchema: z.object({
+        query: z.string(),
+        limit: z.number().int().min(1).max(20).default(6),
+      }),
+      execute: async (input) => {
+        const vector = await embed(input.query);
+        if (vector) {
+          const { data, error } = await db.rpc("match_documents", {
+            query_embedding: toVectorLiteral(vector),
+            match_count: input.limit,
+          });
+          if (error) throw new Error(error.message);
+          return data;
+        }
+        const { data, error } = await db
+          .from("documents")
+          .select("id,title,kind,content")
+          .ilike("content", `%${input.query}%`)
+          .limit(input.limit);
+        if (error) throw new Error(error.message);
+        return (data ?? []).map((d) => ({ ...d, content: d.content.slice(0, 1200) }));
+      },
+    }),
+
+    "docs.create": tool({
+      description:
+        "Create a workspace document (note, brief, SOP, meeting summary). Content is plain text/markdown; the team can edit it later in the workspace.",
+      inputSchema: z.object({
+        title: z.string(),
+        content: z.string(),
+        kind: z
+          .enum(["note", "brief", "sop", "meeting", "contract", "other"])
+          .default("note"),
+      }),
+      execute: async (input) => {
+        const id = createId("doc");
+        const vector = await embed(`${input.title}\n${input.content}`.slice(0, 8000));
+        const { error } = await db.from("documents").insert({
+          id,
+          title: input.title,
+          kind: input.kind,
+          content: input.content,
+          embedding: vector ? toVectorLiteral(vector) : null,
+          metadata: { authored_by_agent: ctx.agentName } as never,
+        });
+        if (error) throw new Error(error.message);
+        return { created: true, document_id: id };
+      },
+    }),
+
+    "tasks.query": tool({
+      description: "Query workspace tasks by status, project, or overdue state.",
+      inputSchema: z.object({
+        status: z.enum(["todo", "in_progress", "done", "blocked"]).optional(),
+        project_id: z.string().optional(),
+        overdue: z.boolean().optional(),
+      }),
+      execute: async (input) => {
+        let q = db
+          .from("tasks")
+          .select("id,title,status,priority,due_date,project_id")
+          .limit(100);
+        if (input.status) q = q.eq("status", input.status);
+        if (input.project_id) q = q.eq("project_id", input.project_id);
+        if (input.overdue) {
+          q = q
+            .lt("due_date", new Date().toISOString().slice(0, 10))
+            .neq("status", "done");
+        }
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        return data;
+      },
+    }),
+
+    "tasks.create": tool({
+      description:
+        "Create a task on the team's kanban board. Use for follow-ups and action items your analysis surfaces.",
+      inputSchema: z.object({
+        title: z.string(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+        project_id: z.string().optional(),
+        due_date: z.string().optional().describe("YYYY-MM-DD"),
+      }),
+      execute: async (input) => {
+        const id = createId("tsk");
+        const { error } = await db.from("tasks").insert({
+          id,
+          title: input.title,
+          priority: input.priority,
+          project_id: input.project_id ?? null,
+          due_date: input.due_date ?? null,
+          position: Date.now(),
+          metadata: { created_by_agent: ctx.agentName } as never,
+        });
+        if (error) throw new Error(error.message);
+        return { created: true, task_id: id };
+      },
+    }),
+
     "email.draft": tool({
       description:
         "Draft an outbound email. Drafts are never sent directly — they enter the founder's approval queue.",

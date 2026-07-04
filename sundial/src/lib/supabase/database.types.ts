@@ -625,6 +625,86 @@ export type Database = {
           },
         ];
       };
+      tasks: {
+        Row: {
+          assignee: string | null;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          document_id: string | null;
+          due_date: string | null;
+          id: string;
+          metadata: Json;
+          position: number;
+          priority: string;
+          project_id: string | null;
+          status: string;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          assignee?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          document_id?: string | null;
+          due_date?: string | null;
+          id: string;
+          metadata?: Json;
+          position?: number;
+          priority?: string;
+          project_id?: string | null;
+          status?: string;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          assignee?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          document_id?: string | null;
+          due_date?: string | null;
+          id?: string;
+          metadata?: Json;
+          position?: number;
+          priority?: string;
+          project_id?: string | null;
+          status?: string;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_assignee_fkey";
+            columns: ["assignee"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       webhook_events: {
         Row: {
           event_type: string;
@@ -669,6 +749,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      match_documents: {
+        Args: {
+          match_count?: number;
+          query_embedding: string;
+        };
+        Returns: {
+          content: string;
+          id: string;
+          kind: string;
+          similarity: number;
+          title: string;
+        }[];
+      };
       match_memories: {
         Args: {
           match_count?: number;

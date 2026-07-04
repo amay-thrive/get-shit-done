@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  FileText,
+  SquareCheckBig,
   Users,
   FolderKanban,
   Receipt,
@@ -11,6 +13,7 @@ import {
   ShieldCheck,
   Brain,
   Activity,
+  Flame,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +21,8 @@ import { trpc } from "@/lib/trpc";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Workspace", href: "/dashboard/workspace", icon: FileText },
+  { name: "Tasks", href: "/dashboard/tasks", icon: SquareCheckBig },
   { name: "Clients", href: "/dashboard/clients", icon: Users },
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban },
   { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
@@ -25,6 +30,7 @@ const navigation = [
   { name: "Approvals", href: "/dashboard/approvals", icon: ShieldCheck },
   { name: "Memory", href: "/dashboard/memory", icon: Brain },
   { name: "Activity", href: "/dashboard/activity", icon: Activity },
+  { name: "Usage", href: "/dashboard/usage", icon: Flame },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
