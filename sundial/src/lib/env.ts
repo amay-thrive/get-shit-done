@@ -1,36 +1,38 @@
-import { z } from "zod/v4";
+import { z } from "zod";
 
-const envSchema = z.object({
-  DATABASE_URL: z.string().min(1),
-  CLERK_SECRET_KEY: z.string().min(1),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
-  NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default("/sign-in"),
-  NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default("/sign-up"),
-  STRIPE_SECRET_KEY: z.string().min(1),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1),
-  ZOHO_CLIENT_ID: z.string().min(1),
-  ZOHO_CLIENT_SECRET: z.string().min(1),
-  ZOHO_REFRESH_TOKEN: z.string().min(1),
+/**
+ * Environment contract. Public vars are safe for the browser; server vars
+ * must never be prefixed NEXT_PUBLIC_. Validation is lazy so builds succeed
+ * without secrets, but any server code touching a missing var fails loudly.
+ */
+const serverSchema = z.object({
+  SUPABASE_SECRET_KEY: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().min(1),
-  ZAPIER_WEBHOOK_SECRET: z.string().min(1),
   CRON_SECRET: z.string().min(1),
+  // Optional until the integrations are activated
+  OPENAI_API_KEY: z.string().optional(), // embeddings for semantic memory
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  ZOHO_CLIENT_ID: z.string().optional(),
+  ZOHO_CLIENT_SECRET: z.string().optional(),
+  ZOHO_REFRESH_TOKEN: z.string().optional(),
+  ZAPIER_WEBHOOK_SECRET: z.string().optional(),
 });
 
-export type Env = z.infer<typeof envSchema>;
-
-let _env: Env | null = null;
-
-export function getEnv(): Env {
-  if (_env) return _env;
-  const result = envSchema.safeParse(process.env);
-  if (!result.success) {
-    if (process.env.NODE_ENV === "production") {
-      console.error("Invalid environment variables:", z.prettifyError(result.error));
-      throw new Error("Invalid environment variables");
-    }
-    console.warn("Missing environment variables — some features will be unavailable");
-    return process.env as unknown as Env;
+export function serverEnv() {
+  const parsed = serverSchema.safeParse(process.env);
+  if (!parsed.success) {
+    throw new Error(
+      `Missing server environment variables: ${parsed.error.issues
+        .map((i) => i.path.join("."))
+        .join(", ")}`
+    );
   }
-  _env = result.data;
-  return _env;
+  return parsed.data;
+}
+
+/** Non-throwing accessor for optional integrations. */
+export function optionalEnv(key: string): string | undefined {
+  const v = process.env[key];
+  return v && v.length > 0 ? v : undefined;
 }

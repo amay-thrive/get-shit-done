@@ -1,37 +1,95 @@
-import { z } from "zod/v4";
-import { eq, desc } from "drizzle-orm";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
-import { db } from "../../db";
-import { agentDefinitions, agentRuns } from "../../db/schema";
+import { executeAgent } from "../../agents/runtime/orchestrator";
 
 export const agentsRouter = router({
-  listDefinitions: protectedProcedure.query(async () => {
-    return db.select().from(agentDefinitions).orderBy(agentDefinitions.name);
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const { data, error } = await ctx.db
+      .from("agent_definitions")
+      .select("*")
+      .order("name");
+    if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+    return data;
   }),
 
-  listRuns: protectedProcedure
-    .input(z.object({ agentId: z.string().optional(), limit: z.number().default(50) }))
-    .query(async ({ input }) => {
-      let query = db
-        .select()
-        .from(agentRuns)
-        .orderBy(desc(agentRuns.createdAt))
+  runs: protectedProcedure
+    .input(
+      z.object({
+        agentId: z.string().optional(),
+        limit: z.number().int().min(1).max(100).default(30),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      let q = ctx.db
+        .from("agent_runs")
+        .select("*, agent_definitions(name)")
+        .order("created_at", { ascending: false })
         .limit(input.limit);
-
-      if (input.agentId) {
-        query = query.where(eq(agentRuns.agentId, input.agentId)) as typeof query;
-      }
-
-      return query;
+      if (input.agentId) q = q.eq("agent_id", input.agentId);
+      const { data, error } = await q;
+      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      return data;
     }),
 
-  getRunById: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const result = await db
-        .select()
-        .from(agentRuns)
-        .where(eq(agentRuns.id, input.id));
-      return result[0] ?? null;
+  runDetail: protectedProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const [{ data: run }, { data: steps }] = await Promise.all([
+        ctx.db
+          .from("agent_runs")
+          .select("*, agent_definitions(name, description)")
+          .eq("id", input.runId)
+          .single(),
+        ctx.db
+          .from("agent_steps")
+          .select("*")
+          .eq("run_id", input.runId)
+          .order("step_index"),
+      ]);
+      return { run, steps: steps ?? [] };
     }),
+
+  trigger: protectedProcedure
+    .input(
+      z.object({
+        agentName: z.string(),
+        input: z.record(z.string(), z.unknown()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      return executeAgent({
+        agentName: input.agentName,
+        triggerType: "manual",
+        triggerSource: ctx.user.email ?? ctx.user.id,
+        input: input.input,
+      });
+    }),
+
+  toggle: protectedProcedure
+    .input(z.object({ id: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const { error } = await ctx.db
+        .from("agent_definitions")
+        .update({ enabled: input.enabled, updated_at: new Date().toISOString() })
+        .eq("id", input.id);
+      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+      return { ok: true };
+    }),
+
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+    const { data, error } = await ctx.db
+      .from("agent_runs")
+      .select("status, cost_microdollars, input_tokens, output_tokens")
+      .gte("created_at", since);
+    if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+
+    const total = data.length;
+    const completed = data.filter((r) => r.status === "completed").length;
+    const failed = data.filter((r) => r.status === "failed").length;
+    const costMicro = data.reduce((s, r) => s + r.cost_microdollars, 0);
+    const tokens = data.reduce((s, r) => s + r.input_tokens + r.output_tokens, 0);
+    return { total, completed, failed, costMicro, tokens };
+  }),
 });

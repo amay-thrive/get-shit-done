@@ -1,94 +1,142 @@
 "use client";
 
-import { Bot } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/shared/empty-state";
+import Link from "next/link";
+import { Bot, Play, Clock, Zap, Link2, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { StatusBadge } from "@/components/status-badge";
+import { formatCost } from "@/lib/costs";
+import { formatRelativeTime, cn } from "@/lib/utils";
+
+const TRIGGER_ICON: Record<string, typeof Clock> = {
+  cron: Clock,
+  event: Zap,
+  chain: Link2,
+  manual: Play,
+};
 
 export default function AgentsPage() {
-  const { data: agents, isLoading } = trpc.agents.listDefinitions.useQuery();
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-neutral-900">AI Agents</h1>
-        <div className="animate-pulse space-y-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-24 rounded-lg bg-neutral-100" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const utils = trpc.useUtils();
+  const { data: agents } = trpc.agents.list.useQuery();
+  const { data: runs } = trpc.agents.runs.useQuery({ limit: 20 });
+  const trigger = trpc.agents.trigger.useMutation({
+    onSettled: () => utils.agents.runs.invalidate(),
+  });
+  const toggle = trpc.agents.toggle.useMutation({
+    onSettled: () => utils.agents.list.invalidate(),
+  });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">AI Agents</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            Automated workflows powered by Claude
-          </p>
-        </div>
-        <Button>Configure Agent</Button>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Agent Fleet</h1>
+        <p className="mt-1 text-sm text-muted">
+          Autonomous operators with durable runs, human approval gates, and shared memory.
+        </p>
       </div>
 
-      {!agents?.length ? (
-        <EmptyState
-          icon={Bot}
-          title="No agents configured"
-          description="Set up AI agents to automate invoicing, CRM updates, follow-ups, and more."
-          action={<Button>Configure Agent</Button>}
-        />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {agents.map((agent) => (
+      <div className="grid gap-4 lg:grid-cols-2">
+        {agents?.map((agent) => {
+          const triggers = (agent.triggers ?? []) as { type: string; match?: string; schedule?: string }[];
+          return (
             <div
               key={agent.id}
-              className="rounded-xl border border-neutral-200 bg-white p-6 space-y-3"
+              className={cn(
+                "rounded-xl border border-border-subtle bg-surface p-5 transition-opacity",
+                !agent.enabled && "opacity-50"
+              )}
             >
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-purple-100 p-2">
-                    <Bot className="h-4 w-4 text-purple-600" />
+                  <div className="rounded-lg bg-accent-soft p-2">
+                    <Bot className="h-4 w-4 text-accent" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-neutral-900">{agent.name}</h3>
-                    <p className="text-xs text-neutral-500">{agent.model}</p>
+                    <h3 className="font-mono text-sm font-semibold">{agent.name}</h3>
+                    <p className="text-[11px] text-muted">{agent.model}</p>
                   </div>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                    agent.enabled
-                      ? "bg-green-50 text-green-700"
-                      : "bg-neutral-100 text-neutral-500"
-                  }`}
-                >
-                  {agent.enabled ? "Active" : "Disabled"}
-                </span>
-              </div>
-              {agent.description && (
-                <p className="text-sm text-neutral-500">{agent.description}</p>
-              )}
-              <div className="flex gap-2">
-                {agent.tools.slice(0, 3).map((tool) => (
-                  <span
-                    key={tool}
-                    className="inline-flex items-center rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      toggle.mutate({ id: agent.id, enabled: !agent.enabled })
+                    }
+                    className="text-[11px] text-muted hover:text-foreground"
                   >
-                    {tool}
-                  </span>
-                ))}
-                {agent.tools.length > 3 && (
-                  <span className="text-xs text-neutral-400">
-                    +{agent.tools.length - 3} more
+                    {agent.enabled ? "Disable" : "Enable"}
+                  </button>
+                  <button
+                    onClick={() => trigger.mutate({ agentName: agent.name })}
+                    disabled={!agent.enabled || trigger.isPending}
+                    className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+                  >
+                    <Play className="h-3 w-3" />
+                    Run
+                  </button>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                {agent.description}
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {triggers.map((t, i) => {
+                  const Icon = TRIGGER_ICON[t.type] ?? Play;
+                  return (
+                    <span
+                      key={i}
+                      className="flex items-center gap-1 rounded bg-surface-raised px-2 py-1 font-mono text-[10px] text-muted"
+                    >
+                      <Icon className="h-3 w-3" />
+                      {t.type === "cron" ? t.schedule : t.type === "event" ? t.match : t.type}
+                    </span>
+                  );
+                })}
+                {agent.requires_approval_for.length > 0 && (
+                  <span className="flex items-center gap-1 rounded bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-400">
+                    <ShieldCheck className="h-3 w-3" />
+                    approval-gated
                   </span>
                 )}
               </div>
             </div>
-          ))}
+          );
+        })}
+      </div>
+
+      <div className="rounded-xl border border-border-subtle bg-surface">
+        <div className="border-b border-border-subtle px-5 py-3.5">
+          <h2 className="text-sm font-semibold">Recent runs</h2>
         </div>
-      )}
+        {!runs?.length ? (
+          <p className="px-5 py-8 text-center text-sm text-muted">
+            No runs yet. Hit <span className="text-accent">Run</span> on any agent or press ⌘K.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border-subtle">
+            {runs.map((run) => (
+              <li key={run.id}>
+                <Link
+                  href={`/dashboard/agents/runs/${run.id}`}
+                  className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-surface-raised"
+                >
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                    {(run.agent_definitions as { name: string } | null)?.name ?? run.agent_id}
+                  </span>
+                  <span className="text-[11px] text-muted">{run.trigger_type}</span>
+                  <span className="text-[11px] tabular-nums text-muted">
+                    {formatCost(run.cost_microdollars)}
+                  </span>
+                  <StatusBadge status={run.status} />
+                  <span className="w-16 text-right text-[11px] tabular-nums text-muted">
+                    {formatRelativeTime(run.created_at)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

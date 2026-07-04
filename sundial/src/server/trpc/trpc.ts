@@ -1,31 +1,40 @@
 import { initTRPC, TRPCError } from "@trpc/server";
-import { auth } from "@clerk/nextjs/server";
 import superjson from "superjson";
+import { createClient } from "@/lib/supabase/server";
+import { adminClient } from "@/lib/supabase/admin";
 
 export async function createTRPCContext() {
-  const session = await auth();
-  return { userId: session.userId, sessionClaims: session.sessionClaims };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return {
+    user,
+    /** Service-role client for the API layer — RLS-exempt, server-only. */
+    db: adminClient(),
+  };
 }
 
 export type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 
-const t = initTRPC.context<TRPCContext>().create({
-  transformer: superjson,
-});
+const t = initTRPC.context<TRPCContext>().create({ transformer: superjson });
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
 export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
-  if (!ctx.userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-  return next({ ctx: { ...ctx, userId: ctx.userId } });
+  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
-export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  const role = (ctx.sessionClaims?.metadata as Record<string, unknown>)?.role;
-  if (role !== "admin") {
+export const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  const { data: profile } = await ctx.db
+    .from("profiles")
+    .select("role")
+    .eq("id", ctx.user.id)
+    .single();
+  if (profile?.role !== "admin") {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required" });
   }
   return next({ ctx });

@@ -8,11 +8,13 @@ import {
   FolderKanban,
   Receipt,
   Bot,
-  TrendingUp,
+  ShieldCheck,
+  Brain,
+  Activity,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { APP_NAME } from "@/lib/constants";
+import { trpc } from "@/lib/trpc";
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -20,44 +22,69 @@ const navigation = [
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban },
   { name: "Invoices", href: "/dashboard/invoices", icon: Receipt },
   { name: "Agents", href: "/dashboard/agents", icon: Bot },
-  { name: "Revenue", href: "/dashboard/revenue", icon: TrendingUp },
+  { name: "Approvals", href: "/dashboard/approvals", icon: ShieldCheck },
+  { name: "Memory", href: "/dashboard/memory", icon: Brain },
+  { name: "Activity", href: "/dashboard/activity", icon: Activity },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: kpis } = trpc.dashboard.kpis.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-neutral-50">
-      <div className="flex h-16 items-center gap-2 border-b border-neutral-200 px-6">
-        <div className="h-8 w-8 rounded-lg bg-amber-500 flex items-center justify-center">
-          <span className="text-sm font-bold text-white">S</span>
+    <aside className="flex h-full w-60 flex-col border-r border-border-subtle bg-surface">
+      <div className="flex h-14 items-center gap-2.5 border-b border-border-subtle px-5">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft">
+          <span className="text-sm font-bold text-accent">◐</span>
         </div>
-        <span className="font-semibold text-neutral-900">{APP_NAME}</span>
+        <div className="leading-tight">
+          <div className="text-sm font-semibold">Sundial OS</div>
+          <div className="text-[10px] uppercase tracking-widest text-muted">
+            Venture Studio
+          </div>
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 space-y-0.5 p-3">
         {navigation.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const badge =
+            item.name === "Approvals" && kpis?.pendingApprovals
+              ? kpis.pendingApprovals
+              : null;
           return (
             <Link
               key={item.name}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors",
                 isActive
-                  ? "bg-neutral-900 text-white"
-                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+                  ? "bg-surface-raised font-medium text-foreground"
+                  : "text-muted hover:bg-surface-raised hover:text-foreground"
               )}
             >
-              <item.icon className="h-4 w-4" />
-              {item.name}
+              <span className="flex items-center gap-3">
+                <item.icon className="h-4 w-4" />
+                {item.name}
+              </span>
+              {badge && (
+                <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-black">
+                  {badge}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
+
+      <div className="border-t border-border-subtle p-4 text-[11px] leading-relaxed text-muted">
+        <span className="text-accent">⌘K</span> to command anything
+      </div>
     </aside>
   );
 }
