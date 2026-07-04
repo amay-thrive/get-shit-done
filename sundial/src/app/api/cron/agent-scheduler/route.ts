@@ -10,6 +10,14 @@ interface TriggerSpec {
   schedule?: string;
 }
 
+/**
+ * Vercel Hobby allows one cron tick per day, so the default window is 24h:
+ * every agent whose schedule fired in the last day runs on the daily tick.
+ * On Pro, set the vercel.json cron schedule to every 15 minutes and
+ * SCHEDULER_WINDOW_MINUTES=15 for true time-of-day precision.
+ */
+const WINDOW_MINUTES = Number(process.env.SCHEDULER_WINDOW_MINUTES ?? 1440);
+
 /** Does a 5-field cron expression fire within the window (now-15m, now]? */
 function firesInWindow(schedule: string, now: Date, windowMinutes = 15): boolean {
   const parts = schedule.trim().split(/\s+/);
@@ -62,12 +70,13 @@ export async function GET(req: Request) {
   const due = (agents ?? []).filter((agent) => {
     const triggers = (agent.triggers ?? []) as unknown as TriggerSpec[];
     return triggers.some(
-      (t) => t.type === "cron" && t.schedule && firesInWindow(t.schedule, now)
+      (t) =>
+        t.type === "cron" && t.schedule && firesInWindow(t.schedule, now, WINDOW_MINUTES)
     );
   });
 
   // Deduplicate: skip agents that already ran via cron in the window.
-  const windowStart = new Date(now.getTime() - 15 * 60_000).toISOString();
+  const windowStart = new Date(now.getTime() - WINDOW_MINUTES * 60_000).toISOString();
   const results = [];
   for (const agent of due) {
     const { data: recent } = await db
