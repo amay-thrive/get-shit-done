@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-crm",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/revenue-snapshot",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/agent-scheduler",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
