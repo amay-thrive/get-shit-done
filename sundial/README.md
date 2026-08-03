@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sundial OS
 
-## Getting Started
+The internal operating system for **Sundial Studio** — a venture studio building
+vertical AI businesses in performance, health, wellness, and education.
 
-First, run the development server:
+An event-sourced, AI-native management platform: CRM, projects, invoicing,
+Notion-style workspace, kanban tasks, and a fleet of autonomous AI agents with
+human-in-the-loop approvals — all on a zero-ops serverless stack.
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Framework | Next.js 16 (App Router, Turbopack), TypeScript strict |
+| Database / Auth / Realtime / Vectors | Supabase (Postgres + pgvector) |
+| API | tRPC v11 (end-to-end type safety) |
+| AI runtime | Vercel AI SDK + Anthropic Claude (tool use) |
+| Editor | BlockNote (Notion-style blocks) |
+| UI | Tailwind CSS v4, dnd-kit, TanStack Table, cmdk, lucide |
+| Hosting | Vercel (serverless + cron) |
+
+## Architecture in 60 seconds
+
+- **Event spine** — every business action is an immutable row in `events`.
+  Agents subscribe to event types; the dashboard streams the feed via
+  Supabase Realtime. See `src/server/events.ts`.
+- **Agent runtime** — declarative agent definitions (DB) + typed tools (code).
+  The orchestrator (`src/server/agents/runtime/orchestrator.ts`) runs a
+  Claude tool-use loop, checkpointing every step to `agent_steps` for a
+  live forensic timeline. Outbound actions (email) are **approval-gated**:
+  they queue in `approvals` for one-click human decision.
+- **Semantic memory** — agents store/recall memories in `memories`
+  (pgvector, HNSW). Workspace documents are auto-embedded on save, so
+  agents can search everything the team writes (`docs.search` tool).
+- **Cost telemetry** — every run records tokens + cost in integer
+  microdollars. See the Usage page.
+
+## Local development
 
 ```bash
+npm install
+cp .env.example .env.local   # fill in the values
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required env (see `.env.example` for the full annotated list):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase project
+- `SUPABASE_SECRET_KEY` — server-side service role (never expose to client)
+- `ANTHROPIC_API_KEY` — powers the agents
+- `CRON_SECRET` — protects the Vercel cron endpoint
+- `OPENAI_API_KEY` — optional; enables semantic (vs keyword) memory search
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database
 
-## Learn More
+Migrations live in `supabase/migrations/`. Apply them in order in the
+Supabase SQL editor (or via the Supabase CLI). `0001` is the core schema
+(applied to the live project already); `0002` adds workspace tasks +
+document search.
 
-To learn more about Next.js, take a look at the following resources:
+Types in `src/lib/supabase/database.types.ts` are generated from the live
+schema — regenerate after any migration (`supabase gen types typescript`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Vercel project with root directory = this repo. `vercel.json` configures
+the daily agent-scheduler cron (Hobby plan allows daily; on Pro, switch to
+`*/15 * * * *` and set `SCHEDULER_WINDOW_MINUTES=15`).
 
-## Deploy on Vercel
+## Roadmap
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. HubSpot CRM integration (sync + agent tools + webhooks)
+2. Zoho Books + quarterly IFRS/UAE-VAT tax-prep agent
+3. UI depth pass (detail pages, charts, pipeline board)
+4. Google Calendar + Gmail (OAuth, approval-gated agent actions)
+5. Marketing agents (content → approval → Meta Graph API posting)
